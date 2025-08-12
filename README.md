@@ -2,7 +2,7 @@
 
 ## @anupsahu/gitlab-mcp
 
-Production-ready MCP (Model Context Protocol) server for GitLab API with OAuth 2.0 PKCE authentication.
+MCP (Model Context Protocol) server for GitLab API with OAuth 2.0 PKCE authentication.
 
 ## Features
 
@@ -44,7 +44,7 @@ npm install -g @anupsahu/gitlab-mcp
 {
   "mcpServers": {
     "gitlab": {
-      "command": "npx", 
+      "command": "npx",
       "args": ["-y", "@anupsahu/gitlab-mcp"],
       "env": {
         "GITLAB_PERSONAL_ACCESS_TOKEN": "your_gitlab_token",
@@ -67,32 +67,34 @@ The server supports OAuth 2.0 PKCE authentication for secure access to GitLab:
 ### OAuth Tools
 
 - `oauth_login_pkce` - Initiate OAuth authentication
-- `oauth_status` - Check authentication status  
+- `oauth_status` - Check authentication status
 - `oauth_logout` - Logout and clear tokens
 
 ## Configuration
 
 ### Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `USE_OAUTH` | Enable OAuth 2.0 authentication | `false` |
-| `GITLAB_API_URL` | GitLab API URL | `https://gitlab.com/api/v4` |
-| `GITLAB_PERSONAL_ACCESS_TOKEN` | Personal access token (if not using OAuth) | - |
-| `GITLAB_PROJECT_ID` | Default project ID | - |
-| `GITLAB_ALLOWED_PROJECT_IDS` | Comma-separated list of allowed project IDs | - |
-| `GITLAB_READ_ONLY_MODE` | Enable read-only mode | `false` |
+| Variable                       | Description                                 | Default                     |
+| ------------------------------ | ------------------------------------------- | --------------------------- |
+| `USE_OAUTH`                    | Enable OAuth 2.0 authentication             | `false`                     |
+| `GITLAB_API_URL`               | GitLab API URL                              | `https://gitlab.com/api/v4` |
+| `GITLAB_PERSONAL_ACCESS_TOKEN` | Personal access token (if not using OAuth)  | -                           |
+| `GITLAB_PROJECT_ID`            | Default project ID                          | -                           |
+| `GITLAB_ALLOWED_PROJECT_IDS`   | Comma-separated list of allowed project IDs | -                           |
+| `GITLAB_READ_ONLY_MODE`        | Enable read-only mode                       | `false`                     |
 
 ## Available Tools
 
 ### Repository Operations
+
 - `search_repositories` - Search for repositories
 - `get_repository_tree` - Get repository file tree
 - `get_file_contents` - Read file contents
 - `create_or_update_file` - Create or update files
 - `push_files` - Push multiple files
 
-### Merge Request Operations  
+### Merge Request Operations
+
 - `get_merge_request` - Get merge request details
 - `get_merge_request_diffs` - Get merge request changes
 - `create_merge_request` - Create new merge request
@@ -100,23 +102,27 @@ The server supports OAuth 2.0 PKCE authentication for secure access to GitLab:
 - `merge_merge_request` - Merge a merge request
 
 ### Issue Operations
+
 - `create_issue` - Create new issue
 - `get_issue` - Get issue details
 - `update_issue` - Update issue
 - `list_issues` - List issues
 
 ### Commit Operations
+
 - `list_commits` - List repository commits
 - `get_commit` - Get commit details
 - `get_commit_diff` - Get commit changes
 
 ### Branch Operations
+
 - `create_branch` - Create new branch
 - `fork_repository` - Fork repository
 
 ## Token Storage
 
 OAuth tokens are automatically saved to:
+
 - **Path**: `~/.config/gitlab-mcp/oauth-config.json`
 - **Format**: JSON configuration file
 - **Persistence**: Tokens survive server restarts
@@ -125,6 +131,7 @@ OAuth tokens are automatically saved to:
 ## Examples
 
 ### Authenticate with OAuth
+
 ```javascript
 // Use the oauth_login_pkce tool
 {
@@ -133,6 +140,7 @@ OAuth tokens are automatically saved to:
 ```
 
 ### Get Merge Request Details
+
 ```javascript
 {
   "project_id": "12345",
@@ -142,9 +150,10 @@ OAuth tokens are automatically saved to:
 ```
 
 ### Create Issue
+
 ```javascript
 {
-  "project_id": "12345", 
+  "project_id": "12345",
   "title": "Bug Report",
   "description": "Description of the issue",
   "sessionId": "my-session"
@@ -183,6 +192,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Support
 
 For issues and questions:
+
 - Create an issue in the [GitLab repository](https://gitlab.com/anupsahu/gitlab-mcp)
 - Check existing documentation and examples
 
