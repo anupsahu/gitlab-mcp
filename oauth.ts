@@ -352,8 +352,8 @@ export class GitLabOAuthManager {
         }
       });
 
-      server.listen(port, 'localhost', () => {
-        logger.info(`OAuth callback server started on http://localhost:${port}`);
+      server.listen(port, '127.0.0.1', () => {
+        logger.info(`OAuth callback server started on http://127.0.0.1:${port}`);
         resolve(server);
       });
 
@@ -429,6 +429,17 @@ export class GitLabOAuthManager {
     await this.saveConfigToFile(targetSession);
 
     logger.info(`OAuth authentication completed for user: ${targetSession.user?.username}`);
+
+    // Close the callback server after successful authentication
+    // This frees up port 7171 for other instances
+    if (this.callbackServer) {
+      setTimeout(() => {
+        this.callbackServer?.close(() => {
+          logger.info('OAuth callback server closed after successful authentication');
+        });
+        this.callbackServer = undefined;
+      }, 3000); // Wait 3 seconds to ensure browser shows success page
+    }
   }
 
   /**
