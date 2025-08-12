@@ -62,7 +62,9 @@ The server supports OAuth 2.0 PKCE authentication for secure access to GitLab:
 1. **Start the server** with `USE_OAUTH=true`
 2. **Authenticate** using the `oauth_login_pkce` tool
 3. **Tokens are automatically saved** and persist across restarts
-4. **Automatic token refresh** handles expiration seamlessly
+4. **Port reuse + fallback**: prefers http://localhost:7171; if busy, reuses existing MCP auth server or falls back to the first free port in a small range (configurable). Ensure your GitLab OAuth app whitelists redirect URIs for that range.
+
+5. **Automatic token refresh** handles expiration seamlessly
 
 ### OAuth Tools
 
@@ -74,14 +76,16 @@ The server supports OAuth 2.0 PKCE authentication for secure access to GitLab:
 
 ### Environment Variables
 
-| Variable                       | Description                                 | Default                     |
-| ------------------------------ | ------------------------------------------- | --------------------------- |
-| `USE_OAUTH`                    | Enable OAuth 2.0 authentication             | `false`                     |
-| `GITLAB_API_URL`               | GitLab API URL                              | `https://gitlab.com/api/v4` |
-| `GITLAB_PERSONAL_ACCESS_TOKEN` | Personal access token (if not using OAuth)  | -                           |
-| `GITLAB_PROJECT_ID`            | Default project ID                          | -                           |
-| `GITLAB_ALLOWED_PROJECT_IDS`   | Comma-separated list of allowed project IDs | -                           |
-| `GITLAB_READ_ONLY_MODE`        | Enable read-only mode                       | `false`                     |
+| Variable                        | Description                                  | Default                     |
+| ------------------------------- | -------------------------------------------- | --------------------------- |
+| `USE_OAUTH`                     | Enable OAuth 2.0 authentication              | `false`                     |
+| `GITLAB_API_URL`                | GitLab API URL                               | `https://gitlab.com/api/v4` |
+| `GITLAB_PERSONAL_ACCESS_TOKEN`  | Personal access token (if not using OAuth)   | -                           |
+| `GITLAB_PROJECT_ID`             | Default project ID                           | -                           |
+| `GITLAB_ALLOWED_PROJECT_IDS`    | Comma-separated list of allowed project IDs  | -                           |
+| `GITLAB_READ_ONLY_MODE`         | Enable read-only mode                        | `false`                     |
+| `OAUTH_REDIRECT_PORT_PREFERRED` | Preferred localhost callback port            | `7171`                      |
+| `OAUTH_REDIRECT_PORT_RANGE`     | Fallback range for callback port (inclusive) | `7171-7199`                 |
 
 ## Available Tools
 

@@ -33,6 +33,8 @@ export interface OAuthSession {
   codeVerifier: string;
   state: string;
   expiresAt: number;
+  // Dynamic redirect URI used for this session's OAuth code exchange
+  redirectUri?: string;
   user?: {
     id: string;
     username: string;
@@ -196,14 +198,14 @@ export class GitLabOAuthManager {
 
       const tokens = await response.json() as OAuthTokens;
       tokens.created_at = Date.now();
-      
+
       // Update session with new tokens
       session.tokens = tokens;
       session.expiresAt = Date.now() + (tokens.expires_in * 1000);
-      
+
       // Save to config file
       await this.saveConfigToFile(session);
-      
+
       logger.info('OAuth token refreshed successfully');
       return true;
     } catch (error) {
@@ -275,10 +277,10 @@ export class GitLabOAuthManager {
   /**
    * Start callback server for OAuth redirect (like glab CLI)
    */
-  private async startCallbackServer(): Promise<Server> {
+  private async startCallbackServer(port: number): Promise<Server> {
     return new Promise((resolve, reject) => {
       const server = createServer((req, res) => {
-        const url = new URL(req.url!, `http://localhost:7171`);
+        const url = new URL(req.url!, `http://localhost:${port}`);
 
         if (url.pathname === '/auth/redirect') {
           const code = url.searchParams.get('code');
@@ -341,14 +343,17 @@ export class GitLabOAuthManager {
               </html>
             `);
           }
+        } else if (url.pathname === '/health') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'healthy', service: 'gitlab-mcp-oauth-callback' }));
         } else {
           res.writeHead(404, { 'Content-Type': 'text/plain' });
           res.end('Not Found');
         }
       });
 
-      server.listen(7171, 'localhost', () => {
-        logger.info('OAuth callback server started on http://localhost:7171');
+      server.listen(port, 'localhost', () => {
+        logger.info(`OAuth callback server started on http://localhost:${port}`);
         resolve(server);
       });
 
@@ -386,7 +391,7 @@ export class GitLabOAuthManager {
         grant_type: 'authorization_code',
         client_id: '41d48f9422ebd655dd9cf2947d6979681dfaddc6d0c56f7628f6ada59559af1e',
         code,
-        redirect_uri: 'http://localhost:7171/auth/redirect',
+        redirect_uri: targetSession.redirectUri || 'http://localhost:7171/auth/redirect',
         code_verifier: targetSession.codeVerifier,
       }),
     });
@@ -434,7 +439,16 @@ export class GitLabOAuthManager {
     const codeVerifier = randomBytes(32).toString('base64url');
     const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url');
     const state = randomBytes(32).toString('base64url');
-    const redirectUri = "http://localhost:7171/auth/redirect";
+
+    // Determine callback port with reuse-first strategy and fallback range
+    const preferredPort = Number(process.env.OAUTH_REDIRECT_PORT_PREFERRED || 7171);
+    const rangeEnv = String(process.env.OAUTH_REDIRECT_PORT_RANGE || "7171-7199");
+    const [rangeStartStr, rangeEndStr] = rangeEnv.split('-');
+    const rangeStart = Number(rangeStartStr) || preferredPort;
+    const rangeEnd = Number(rangeEndStr) || preferredPort;
+
+    const port = await this.findReusableOrAvailablePort(preferredPort, rangeStart, rangeEnd);
+    const redirectUri = `http://localhost:${port}/auth/redirect`;
 
     // Use provided sessionId or generate new one
     const finalSessionId = sessionId || `oauth-session-${Date.now()}`;
@@ -453,6 +467,7 @@ export class GitLabOAuthManager {
       codeVerifier,
       state,
       expiresAt: 0,
+      redirectUri,
     };
 
     this.sessions.set(finalSessionId, session);
@@ -467,8 +482,8 @@ export class GitLabOAuthManager {
     authUrl.searchParams.set('code_challenge_method', 'S256');
     authUrl.searchParams.set('state', state);
 
-    // Start callback server
-    const server = await this.startCallbackServer();
+    // Start callback server on chosen port
+    const server = await this.startCallbackServer(port);
     this.callbackServer = server;
 
     logger.info(`PKCE OAuth flow initiated for session: ${finalSessionId}`);
@@ -522,6 +537,58 @@ export class GitLabOAuthManager {
       sessionId,
       message: "Authentication is valid"
     };
+  }
+
+  /**
+   * Try to reuse preferredPort if an MCP-compatible server is already running.
+   * Otherwise, find the first available port in [rangeStart, rangeEnd].
+   */
+  private async findReusableOrAvailablePort(preferredPort: number, rangeStart: number, rangeEnd: number): Promise<number> {
+    // Prefer preferredPort if it's actually free
+    const availablePreferred = await this.isPortFree(preferredPort);
+    if (availablePreferred) return preferredPort;
+
+    // Scan range for first free port (skip preferred since it's busy)
+    for (let p = Math.max(rangeStart, preferredPort + 1); p <= rangeEnd; p++) {
+      const isFree = await this.isPortFree(p);
+      if (isFree) return p;
+    }
+
+    // No free port in range; fall back to preferred (will cause a clear bind error)
+    return preferredPort;
+  }
+
+  /**
+   * Check if a port is free by attempting to listen and immediately closing.
+   */
+  private async isPortFree(port: number): Promise<boolean> {
+    const net = await import('net');
+    return new Promise(resolve => {
+      const tester = net.createServer()
+        .once('error', (err: NodeJS.ErrnoException) => {
+          if (err.code === 'EADDRINUSE') resolve(false);
+          else resolve(false);
+        })
+        .once('listening', () => {
+          tester.close(() => resolve(true));
+        })
+        .listen(port, '127.0.0.1');
+    });
+  }
+
+  /**
+   * Probe health endpoint to see if an MCP OAuth callback server is already running.
+   */
+  private async probeHealth(port: number): Promise<boolean> {
+    try {
+      const resp = await fetch(`http://127.0.0.1:${port}/health`, { method: 'GET' });
+      if (!resp.ok) return false;
+      const data = await resp.json().catch(() => ({} as any));
+      // Minimal signature: status: healthy
+      return data && data.status === 'healthy';
+    } catch {
+      return false;
+    }
   }
 
   /**
