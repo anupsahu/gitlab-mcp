@@ -440,15 +440,21 @@ export class GitLabOAuthManager {
     const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url');
     const state = randomBytes(32).toString('base64url');
 
-    // Determine callback port with reuse-first strategy and fallback range
-    const preferredPort = Number(process.env.OAUTH_REDIRECT_PORT_PREFERRED || 7171);
-    const rangeEnv = String(process.env.OAUTH_REDIRECT_PORT_RANGE || "7171-7199");
-    const [rangeStartStr, rangeEndStr] = rangeEnv.split('-');
-    const rangeStart = Number(rangeStartStr) || preferredPort;
-    const rangeEnd = Number(rangeEndStr) || preferredPort;
-
-    const port = await this.findReusableOrAvailablePort(preferredPort, rangeStart, rangeEnd);
+    // OAuth callback must always use port 7171 for compatibility with glab CLI OAuth app
+    const port = 7171;
     const redirectUri = `http://localhost:${port}/auth/redirect`;
+
+    // Check if port 7171 already has our OAuth callback server running
+    const canReuseServer = await this.probeForMCPOAuthServer(port);
+    if (canReuseServer) {
+      logger.info('Reusing existing MCP OAuth callback server on port 7171');
+    } else {
+      // Verify port 7171 is available for our new server
+      const isAvailable = await this.isPortFree(port);
+      if (!isAvailable) {
+        throw new Error(`OAuth callback requires port 7171 to be free. Please stop any process using port 7171 and try again. (Check with: lsof -i :7171)`);
+      }
+    }
 
     // Use provided sessionId or generate new one
     const finalSessionId = sessionId || `oauth-session-${Date.now()}`;
@@ -482,9 +488,15 @@ export class GitLabOAuthManager {
     authUrl.searchParams.set('code_challenge_method', 'S256');
     authUrl.searchParams.set('state', state);
 
-    // Start callback server on chosen port
-    const server = await this.startCallbackServer(port);
-    this.callbackServer = server;
+    // Start callback server on port 7171 (or reuse existing)
+    let server: Server;
+    if (canReuseServer) {
+      // Don't start a new server, just create a placeholder for the return value
+      server = {} as Server; // We're reusing the existing server
+    } else {
+      server = await this.startCallbackServer(port);
+      this.callbackServer = server;
+    }
 
     logger.info(`PKCE OAuth flow initiated for session: ${finalSessionId}`);
 
@@ -539,24 +551,7 @@ export class GitLabOAuthManager {
     };
   }
 
-  /**
-   * Try to reuse preferredPort if an MCP-compatible server is already running.
-   * Otherwise, find the first available port in [rangeStart, rangeEnd].
-   */
-  private async findReusableOrAvailablePort(preferredPort: number, rangeStart: number, rangeEnd: number): Promise<number> {
-    // Prefer preferredPort if it's actually free
-    const availablePreferred = await this.isPortFree(preferredPort);
-    if (availablePreferred) return preferredPort;
 
-    // Scan range for first free port (skip preferred since it's busy)
-    for (let p = Math.max(rangeStart, preferredPort + 1); p <= rangeEnd; p++) {
-      const isFree = await this.isPortFree(p);
-      if (isFree) return p;
-    }
-
-    // No free port in range; fall back to preferred (will cause a clear bind error)
-    return preferredPort;
-  }
 
   /**
    * Check if a port is free by attempting to listen and immediately closing.
@@ -577,19 +572,25 @@ export class GitLabOAuthManager {
   }
 
   /**
-   * Probe health endpoint to see if an MCP OAuth callback server is already running.
+   * Check if port 7171 has our MCP OAuth callback server running
    */
-  private async probeHealth(port: number): Promise<boolean> {
+  private async probeForMCPOAuthServer(port: number): Promise<boolean> {
     try {
-      const resp = await fetch(`http://127.0.0.1:${port}/health`, { method: 'GET' });
+      const resp = await fetch(`http://127.0.0.1:${port}/health`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(2000) // 2 second timeout
+      });
       if (!resp.ok) return false;
+
       const data = await resp.json().catch(() => ({} as any));
-      // Minimal signature: status: healthy
-      return data && data.status === 'healthy';
+      // Check for our specific MCP OAuth callback server signature
+      return data && data.status === 'healthy' && data.service === 'gitlab-mcp-oauth-callback';
     } catch {
       return false;
     }
   }
+
+
 
   /**
    * Get persistent session ID (for loading from config)

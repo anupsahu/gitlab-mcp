@@ -62,7 +62,7 @@ The server supports OAuth 2.0 PKCE authentication for secure access to GitLab:
 1. **Start the server** with `USE_OAUTH=true`
 2. **Authenticate** using the `oauth_login_pkce` tool
 3. **Tokens are automatically saved** and persist across restarts
-4. **Port reuse + fallback**: prefers http://localhost:7171; if busy, reuses existing MCP auth server or falls back to the first free port in a small range (configurable). Ensure your GitLab OAuth app whitelists redirect URIs for that range.
+4. **Port requirement**: OAuth callback always uses http://localhost:7171 for compatibility with GitLab's official OAuth app. Ensure port 7171 is free during authentication.
 
 5. **Automatic token refresh** handles expiration seamlessly
 
